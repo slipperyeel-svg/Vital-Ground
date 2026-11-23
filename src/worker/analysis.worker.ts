@@ -114,6 +114,7 @@ function companyView(g: Grid, L: CompanyLayout, ms: number): CompanyView {
     killZone: L.killZone,
     deadGround: L.deadGround,
     mines: L.mines,
+    minefields: L.minefields,
     notes,
     timeMs: Math.round(ms),
   };

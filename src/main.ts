@@ -769,9 +769,8 @@ function renderSituation() {
     }
     if (co.hq) units.push(unitFeature(co.hq.point, { identity: 'hostile', echelon: 'company', hq: true }));
     for (const d of co.dummies ?? []) units.push(unitFeature(d.point, { identity: 'hostile', echelon: 'section', dummy: true }));
-    // DS: the minefield itself, once (the "found" outline is part of it).
-    const laid = m.minefields.filter((mf) => mf.label !== 'Mines found');
-    for (const mf of laid.length ? laid : m.minefields) graphics.push(...minefield(c, mf.outline, 'mixed', 'hostile', false));
+    // DS: the minefields as laid, in APP-6 (solid outline, AT and AP mine symbols inside).
+    for (const outline of co.minefields ?? []) graphics.push(...minefield(c, outline, 'mixed', 'hostile', false));
   } else {
     for (const x of m.sightings) {
       if (x.phase === 2 && !phase2Shown) continue;
@@ -839,7 +838,8 @@ function showScenarioDS(show: boolean) {
   const c = v.company;
   $('sc-ds').hidden = !show;
   (map.getSource('company-zones') as ImageSource).updateImage({
-    url: show ? companyZonesImage(c.maskWidth!, c.maskHeight!, c.killZone!, c.deadGround!, c.mines ?? null) : BLANK,
+    // Mines are drawn as APP-6 minefields (renderSituation), not shaded.
+    url: show ? companyZonesImage(c.maskWidth!, c.maskHeight!, c.killZone!, c.deadGround!, null) : BLANK,
     coordinates: boxCorners(box),
   });
   // Platoon areas and the gap outline only: the units themselves are APP-6 symbols.

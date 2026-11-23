@@ -215,6 +215,8 @@ export interface CompanyLayout {
   deadGround: Mask;
   /** Mined and obstructed ground, if the option is on. */
   mines: Mask | null;
+  /** The mined ground as separate minefields, each an outline (local metres), for APP-6 drawing. */
+  minefields: Point[][];
   /** Share of the ground under fire covered by two or more positions. */
   interlock: number;
   /** For each fighting position (label), the positions that can support it by fire. */
@@ -1166,6 +1168,7 @@ export function placeEnemyCompany(input: CompanyInput): CompanyLayout | null {
     killZone,
     deadGround,
     mines,
+    minefields: mines ? minefieldOutlines(mines, cg.width, cg.height, cg.cellM) : [],
     interlock,
     support: fighting.map((r, k) => ({ label: r.label, supportedBy: supportedBy[k] })),
     reasons,
@@ -1175,3 +1178,58 @@ export function placeEnemyCompany(input: CompanyInput): CompanyLayout | null {
 
 /** Unit vector of the attacker's movement for a layout (for the map). */
 export const advanceVector = (l: CompanyLayout) => bearingVector(l.advanceBearingDeg);
+
+/**
+ * Split a mines mask into separate minefields and give each an outline (its
+ * convex hull, local metres), so it can be drawn as an APP-6 minefield (PO,
+ * 23 Nov 2026). Mined cells within `joinM` of each other count as one field;
+ * scraps smaller than `minAreaM2` are dropped.
+ */
+export function minefieldOutlines(mask: Uint8Array, width: number, height: number, cellM: number, joinM = 30, minAreaM2 = 2000): Point[][] {
+  const label = new Int32Array(width * height).fill(-1);
+  const R = Math.max(1, Math.round(joinM / cellM));
+  const out: Point[][] = [];
+  const toX = (c: number) => (c + 0.5) * cellM - (width * cellM) / 2;
+  const toY = (r: number) => (height * cellM) / 2 - (r + 0.5) * cellM;
+  for (let s0 = 0; s0 < mask.length; s0++) {
+    if (!mask[s0] || label[s0] >= 0) continue;
+    const id = out.length;
+    const cells: number[] = [];
+    const stack = [s0];
+    label[s0] = id;
+    while (stack.length) {
+      const i = stack.pop()!;
+      cells.push(i);
+      const r = Math.floor(i / width), c = i % width;
+      for (let dr = -R; dr <= R; dr++)
+        for (let dc = -R; dc <= R; dc++) {
+          const rr = r + dr, cc = c + dc;
+          if (rr < 0 || cc < 0 || rr >= height || cc >= width) continue;
+          const j = rr * width + cc;
+          if (mask[j] && label[j] < 0) { label[j] = id; stack.push(j); }
+        }
+    }
+    if (cells.length * cellM * cellM < minAreaM2) { out.push([]); continue; }
+    // Convex hull of the cell corners (monotone chain).
+    const h = cellM / 2;
+    const pts: Point[] = [];
+    for (const i of cells) {
+      const x = toX(i % width), y = toY(Math.floor(i / width));
+      pts.push({ x: x - h, y: y - h }, { x: x + h, y: y - h }, { x: x + h, y: y + h }, { x: x - h, y: y + h });
+    }
+    pts.sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower: Point[] = [], upper: Point[] = [];
+    for (const p of pts) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    for (let k = pts.length - 1; k >= 0; k--) {
+      const p = pts[k];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    out.push([...lower.slice(0, -1), ...upper.slice(0, -1)]);
+  }
+  return out.filter((o) => o.length >= 3);
+}

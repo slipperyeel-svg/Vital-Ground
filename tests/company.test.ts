@@ -118,3 +118,19 @@ describe('any of the 16 compass points', () => {
     expect(L2!.reasons[0]).toMatch(/on 0400 mils/);
   });
 });
+
+describe('minefields as APP-6 outlines (PO, 23 Nov 2026)', () => {
+  it('splits mined ground into separate fields, each outlined, and drops scraps', async () => {
+    const { minefieldOutlines } = await import('../src/tactics/companyDefence');
+    const W = 50, H = 50, cell = 10;
+    const m = new Uint8Array(W * H);
+    for (let r = 5; r < 10; r++) for (let c = 5; c < 20; c++) m[r * W + c] = 1; // 150 x 50 m
+    for (let r = 30; r < 36; r++) for (let c = 30; c < 40; c++) m[r * W + c] = 1; // 100 x 60 m, far away
+    m[45 * W + 2] = 1; // a single cell: a scrap
+    const o = minefieldOutlines(m, W, H, cell);
+    expect(o.length).toBe(2);
+    const xs = o[0].map((p) => p.x), ys = o[0].map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(150);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(50);
+  });
+});

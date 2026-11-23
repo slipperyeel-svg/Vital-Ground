@@ -194,6 +194,8 @@ export interface CompanyView {
   killZone?: Uint8Array;
   deadGround?: Uint8Array;
   mines?: Uint8Array | null;
+  /** The minefields as outlines (local metres), drawn in APP-6. */
+  minefields?: { x: number; y: number }[][];
   /** DS notes: reasons and grid references. */
   notes?: string[];
   timeMs: number;
