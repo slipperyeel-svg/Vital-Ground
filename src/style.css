@@ -344,3 +344,7 @@ body.quick #btn-go-plan { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .loading-mark .ring, .loading-mark .ring2, .loading-mark .dot { animation: none; }
 }
+
+/* Attack or defence problems (PO, 23 Nov 2026): show only the tools and legend for the kind open. */
+body:not(.defence) .defence-only { display: none !important; }
+body.defence .attack-only { display: none !important; }

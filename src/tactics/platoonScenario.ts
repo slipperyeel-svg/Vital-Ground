@@ -22,7 +22,16 @@ import { analysisGrids } from './sectionDefence';
 import type { CompanyLayout, EnemyPosition } from './companyDefence';
 import { hhmm, sunTimes } from './sun';
 
-export type TaskType = 'secure' | 'neutralise' | 'findFix' | 'screen';
+/** Offensive tasks (the original problems). */
+export type AttackTask = 'secure' | 'neutralise' | 'findFix' | 'screen';
+/** Defensive tasks (PO, 23 Nov 2026). */
+export type DefenceTask = 'defend' | 'block';
+export type TaskType = AttackTask | DefenceTask;
+/** The kind of problem (PO, 23 Nov 2026: selectable, or left to chance). */
+export type ProblemType = 'attack' | 'defence';
+export const ATTACK_TASKS: AttackTask[] = ['secure', 'neutralise', 'findFix', 'screen'];
+export const DEFENCE_TASKS: DefenceTask[] = ['defend', 'block'];
+export const problemTypeOf = (t: TaskType): ProblemType => ((DEFENCE_TASKS as string[]).includes(t) ? 'defence' : 'attack');
 export type InfoLevel = 'rich' | 'partial' | 'poor';
 /** How much of the enemy you are tasked against lies inside your boundaries (PO, 20 Nov 2026). */
 export type LaneMode = 'whole' | 'most' | 'part';
@@ -34,6 +43,8 @@ export const TASK_LABEL: Record<TaskType, string> = {
   neutralise: 'Neutralise enemy in an area',
   findFix: 'Find and fix',
   screen: 'Screen a flank',
+  defend: 'Defend a platoon position',
+  block: 'Block a route',
 };
 
 /** The quality gate for movement: PO to tune (DECISIONS.md 127). */
@@ -74,6 +85,14 @@ export interface ScenarioMarkers {
     kind: 'infantry' | 'mechanisedInfantry' }[];
   /** Friendly control measures (2 up): company boundary, start line, phase line. */
   control: { kind: 'boundary' | 'phaseLine'; path: Point[]; label: string; /** Boundary: units on its [left, right], looking forward. */ sides?: [string, string] }[];
+  /** Defence: your platoon area (blue outline). */
+  area?: { outline: Point[]; label: string };
+  /** Defence: the enemy's axes. `reported` ones are shown (dashed) before the ground truth; all are shown with it. */
+  enemyAxes?: { path: Point[]; label: string; reported: boolean; kind: 'mounted' | 'dismounted' | 'infiltration' }[];
+  /** Defence: enemy overwatch (fire support) positions, shown with the ground truth. */
+  enemyOverwatch?: { point: Point; label: string }[];
+  /** Defence: the enemy's assembly area, shown with the ground truth. */
+  enemyAssembly?: Point;
   /** The battlegroup objective. */
   bgObjective: { point: Point; name: string; onMap: boolean };
   /** Effects arrows (axes of advance), always shown. */
@@ -155,7 +174,7 @@ export const FRONTAGE: Record<BgType, readonly [number, number]> = { light: [800
  * about right, comfortable or generous. First figures; PO to confirm.
  */
 export const TIMING = {
-  taskMin: { secure: 60, neutralise: 45, findFix: 45, screen: 30 } as Record<TaskType, number>,
+  taskMin: { secure: 60, neutralise: 45, findFix: 45, screen: 30 } as Record<AttackTask, number>,
   slack: [
     { name: 'tight', factor: 0.8 },
     { name: 'about right', factor: 1.0 },
@@ -168,6 +187,7 @@ export const TIMING = {
 const PL_NAMES = ['OAK', 'ASH', 'ELM', 'BIRCH', 'ROWAN', 'HAZEL'];
 
 export interface PlatoonScenario {
+  problemType: ProblemType;
   task: TaskType;
   info: InfoLevel;
   title: string;
@@ -200,6 +220,8 @@ export interface PlatoonScenario {
   phase2: { time: string; messages: { time: string; from: string; text: string }[]; questions: string[] };
   /** Ground truth facts, revealed after the user decides (G13: no school solution). */
   ds: string[];
+  /** Defence: when the enemy's assault groups leave their assembly area (ms since 1970). */
+  enemyMovesMs?: number;
   /** The objective or focus point and computed routes, for the DS map. */
   objective: Point;
   markers: ScenarioMarkers;
@@ -235,6 +257,27 @@ function rng(seed: number) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** The light now (G6): before first light, in daylight (with the light left), or after last light. */
+export function lightText(lat: number, lon: number, nowT: Date, tz?: string): string {
+  const sun = sunTimes(lat, lon, nowT);
+  const nowMs = nowT.getTime();
+  if (sun.sunrise && nowMs < sun.sunrise.getTime())
+    return sun.firstLight && nowMs < sun.firstLight.getTime()
+      ? `It is dark. First light ${hhmm(sun.firstLight, tz)}, sunrise ${hhmm(sun.sunrise, tz)}.`
+      : `First light was ${hhmm(sun.firstLight, tz)}; sunrise ${hhmm(sun.sunrise, tz)}.`;
+  if (sun.lastLight && nowMs < sun.lastLight.getTime()) {
+    const mins = Math.round((sun.lastLight.getTime() - nowMs) / 60_000);
+    const r10 = Math.round(mins / 10) * 10, hh = Math.floor(r10 / 60), mm = r10 % 60;
+    const left = mins < 60
+      ? `about ${Math.max(5, Math.round(mins / 5) * 5)} minutes of light remain`
+      : `about ${hh} hour${hh > 1 ? 's' : ''}${mm ? ` ${mm} minutes` : ''} of light remain${hh === 1 && !mm ? 's' : ''}`;
+    const set = sun.sunset && nowMs >= sun.sunset.getTime() ? `Sunset was ${hhmm(sun.sunset, tz)}` : `Sunset ${hhmm(sun.sunset, tz)}`;
+    return `${set}, last light ${hhmm(sun.lastLight, tz)}: ${left}.`;
+  }
+  const tomorrow = sunTimes(lat, lon, new Date(nowMs + 86_400_000));
+  return `It is dark: last light was ${hhmm(sun.lastLight, tz)}. First light tomorrow ${hhmm(tomorrow.firstLight, tz)}, sunrise ${hhmm(tomorrow.sunrise, tz)}.`;
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -347,7 +390,7 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
   // ---- Task and objective --------------------------------------------------
   const half = (cg.width * cg.cellM) / 2 - 150;
   const clampBox = (p: Point) => ({ x: Math.max(-half, Math.min(half, p.x)), y: Math.max(-half, Math.min(half, p.y)) });
-  const objectiveFor = (t: TaskType): { point: Point; name: string } => {
+  const objectiveFor = (t: AttackTask): { point: Point; name: string } => {
     if (t === 'secure') {
       const beyond = (depthPl ? fwd(depthPl.centre) : frontLine + 500) + 300;
       const q = main.find((p) => fwd(p) >= beyond) ?? main[main.length - 1];
@@ -380,7 +423,7 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
     return `the track junction area at ${ref(p)}`;
   }
 
-  const evaluate = (t: TaskType) => {
+  const evaluate = (t: AttackTask) => {
     const obj = objectiveFor(t);
     const direct = routeTo(plain.prev, plain.cost, obj.point);
     const covered = routeTo(safe.prev, safe.cost, obj.point);
@@ -403,7 +446,8 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
     } else why = 'no route to the objective.';
     return { t, obj, direct, covered, ok, why };
   };
-  const order: TaskType[] = input.task ? [input.task] : (['secure', 'neutralise', 'findFix', 'screen'] as TaskType[]).sort(() => random() - 0.5);
+  const wanted = input.task && problemTypeOf(input.task) === 'attack' ? (input.task as AttackTask) : undefined;
+  const order: AttackTask[] = wanted ? [wanted] : ([...ATTACK_TASKS]).sort(() => random() - 0.5);
   const tried = order.map(evaluate);
   const chosen = tried.find((x) => x.ok) ?? tried[0];
   const task = chosen.t;
@@ -415,7 +459,6 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
   // The time now is the real time, or the time the DS set for the problem (PO, 15 Nov 2026).
   const nowT = input.now ?? new Date();
   random(); // (was the dawn/afternoon choice; kept so the other choices for a seed stay the same)
-  const sun = sunTimes(centre.lat, centre.lon, nowT);
   // Complete by (PO, 15 Nov 2026: vary it): the time the task needs (the obvious route
   // at 2 km/h, plus time for the task itself), made tight, about right, comfortable
   // or generous; to the nearest ten minutes, between 45 minutes and 6 hours.
@@ -428,27 +471,7 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
   const byT = new Date(Math.round((nowT.getTime() + allowMin * 60_000) / tenMin) * tenMin);
   const tz = input.timeZone;
   const dateStr = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', timeZone: tz }).format(nowT);
-  const nowMs = nowT.getTime();
-  let light: string;
-  if (sun.sunrise && nowMs < sun.sunrise.getTime()) {
-    // Before sunrise: first light and sunrise today.
-    light = sun.firstLight && nowMs < sun.firstLight.getTime()
-      ? `It is dark. First light ${hhmm(sun.firstLight, tz)}, sunrise ${hhmm(sun.sunrise, tz)}.`
-      : `First light was ${hhmm(sun.firstLight, tz)}; sunrise ${hhmm(sun.sunrise, tz)}.`;
-  } else if (sun.lastLight && nowMs < sun.lastLight.getTime()) {
-    // Daylight: sunset, last light and the light left.
-    const mins = Math.round((sun.lastLight.getTime() - nowMs) / 60_000);
-    const r10 = Math.round(mins / 10) * 10, hh = Math.floor(r10 / 60), mm = r10 % 60;
-    const left = mins < 60
-      ? `about ${Math.max(5, Math.round(mins / 5) * 5)} minutes of light remain`
-      : `about ${hh} hour${hh > 1 ? 's' : ''}${mm ? ` ${mm} minutes` : ''} of light remain${hh === 1 && !mm ? 's' : ''}`;
-    const set = sun.sunset && nowMs >= sun.sunset.getTime() ? `Sunset was ${hhmm(sun.sunset, tz)}` : `Sunset ${hhmm(sun.sunset, tz)}`;
-    light = `${set}, last light ${hhmm(sun.lastLight, tz)}: ${left}.`;
-  } else {
-    // After last light: dark until first light tomorrow.
-    const tomorrow = sunTimes(centre.lat, centre.lon, new Date(nowMs + 86_400_000));
-    light = `It is dark: last light was ${hhmm(sun.lastLight, tz)}. First light tomorrow ${hhmm(tomorrow.firstLight, tz)}, sunrise ${hhmm(tomorrow.sunrise, tz)}.`;
-  }
+  const light = lightText(centre.lat, centre.lon, nowT, tz);
   const time = `${dateStr}. Time now ${hhmm(nowT, tz)}. ${light} Your task is to be complete by ${hhmm(byT, tz)}.`;
   const t2 = new Date(nowT.getTime() + 40 * 60_000);
 
@@ -963,6 +986,7 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
     'Check access on the ground before walking to any position.';
 
   return {
+    problemType: 'attack' as const,
     task, info,
     title: `${TASK_LABEL[task]}: 2 Platoon, B Company, ${bn.short}`,
     you, force, situation, bgType, friendlyForces, task_text, enemy, enemyGaps, time, ground, ownTroops, weather, questions,

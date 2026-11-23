@@ -55,6 +55,8 @@ export interface ProblemKey {
   spread?: string;
   /** How much of the enemy lies inside your boundaries, if the DS chose. */
   lane?: string;
+  /** Attack or defence, if chosen ('' or absent: at random). */
+  type?: string;
 }
 
 export interface SavedPlan {

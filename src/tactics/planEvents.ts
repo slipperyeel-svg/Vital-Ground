@@ -58,7 +58,7 @@ export interface DevelopedSituation {
    * where something happened to it, otherwise as far along its route as 2 km/h
    * has taken it.
    */
-  elements: { who: string; point: Point; state: 'in contact' | 'at mines' | 'under shellfire' | 'moving' | 'at the end of its route' }[];
+  elements: { who: string; point: Point; state: 'in contact' | 'at mines' | 'under shellfire' | 'moving' | 'at the end of its route' | 'in position' }[];
   /** The time the positions are given for, e.g. "0749". */
   asAt: string;
 }

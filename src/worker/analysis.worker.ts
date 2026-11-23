@@ -31,7 +31,10 @@ import { loadLidar } from '../terrain/lidar';
 import { placeEnemySection } from '../tactics/sectionDefence';
 import { writeSectionScenario } from '../tactics/sectionScenario';
 import { placeEnemyCompany, type CompanyLayout } from '../tactics/companyDefence';
-import { writePlatoonScenario } from '../tactics/platoonScenario';
+import { problemTypeOf, writePlatoonScenario } from '../tactics/platoonScenario';
+import { writeDefenceScenario } from '../tactics/defenceScenario';
+import { developDefence, defenceFacts } from '../tactics/defenceEvents';
+import type { EnemyAttack } from '../tactics/enemyAttack';
 import { localToLatLon } from '../terrain/elevation';
 import { gridRef } from '../geo/gridref';
 import { inGreatBritain } from '../geo/gridref';
@@ -47,6 +50,8 @@ let lidarSurface: Float32Array | null = null;
 let featureNote = '';
 /** The enemy of the last scenario set, for facts about the user's plan. */
 let lastScenarioLayout: CompanyLayout | null = null;
+/** Defence (PO, 23 Nov 2026): the last problem's attack, and when the enemy moves. */
+let lastAttack: { attack: EnemyAttack; enemyMovesMs: number } | null = null;
 
 const post = (msg: WorkerResponse, transfer: Transferable[] = []) => ctx.postMessage(msg, transfer);
 
@@ -307,6 +312,30 @@ ctx.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       const progress = (message: string) => post({ type: 'progress', id: req.id, message });
       const t0 = performance.now();
       await ensureLayers(progress);
+      // Attack or defence: as asked, else from the task, else at random (seeded, so a problem can be set again).
+      const type = req.problemType ?? (req.task ? problemTypeOf(req.task) : ((req.seed * 2654435761) >>> 0) % 2 ? 'defence' : 'attack');
+      lastAttack = null;
+      lastScenarioLayout = null;
+      if (type === 'defence') {
+        progress('Working out how the enemy will attack…');
+        const r = writeDefenceScenario({ grid, layers, obstacles, task: req.task, info: req.info, seed: req.seed, now: req.now ? new Date(req.now) : undefined });
+        if (!r) {
+          post({ type: 'scenario', id: req.id, result: { found: false, log: ['No enemy attack fits this ground.'], featureNote, timeMs: Math.round(performance.now() - t0) } });
+          return;
+        }
+        lastAttack = { attack: r.attack, enemyMovesMs: r.scenario.enemyMovesMs! };
+        const A = r.attack;
+        const view: ScenarioView = {
+          found: true,
+          log: A.reasons,
+          featureNote,
+          scenario: r.scenario,
+          attack: { deadFromArea: A.deadFromArea.slice(), maskWidth: A.maskWidth, maskHeight: A.maskHeight, options: A.options },
+          timeMs: Math.round(performance.now() - t0),
+        };
+        post({ type: 'scenario', id: req.id, result: view });
+        return;
+      }
       const L = placeEnemyCompany({ grid, layers, obstacles, options: req.options, seed: req.seed, layout: req.layout, spread: req.spread, progress });
       if (!L) {
         post({ type: 'scenario', id: req.id, result: { found: false, log: ['No sensible enemy defence fits ahead of you in any direction.'], featureNote, timeMs: Math.round(performance.now() - t0) } });
@@ -331,6 +360,26 @@ ctx.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       };
       // The masks are copied, not transferred: the worker keeps the layout for plan facts.
       post({ type: 'scenario', id: req.id, result: view });
+    } else if (req.type === 'develop' && lastAttack) {
+      if (!grid) throw new Error('No ground loaded yet');
+      const g = grid;
+      const ref = (p: { x: number; y: number }) => {
+        const c = g.meta.centre;
+        if (!c) return `(${Math.round(p.x)}, ${Math.round(p.y)})`;
+        const ll = localToLatLon(c, p.x, p.y);
+        return gridRef(ll.lat, ll.lon, 3).ref;
+      };
+      post({ type: 'develop', id: req.id, result: developDefence(g, obstacles, lastAttack.attack, req.plan, lastAttack.enemyMovesMs, ref, (d) => hhmm(d)) });
+    } else if (req.type === 'planFacts' && lastAttack) {
+      if (!grid) throw new Error('No ground loaded yet');
+      const g = grid;
+      const ref = (p: { x: number; y: number }) => {
+        const c = g.meta.centre;
+        if (!c) return `(${Math.round(p.x)}, ${Math.round(p.y)})`;
+        const ll = localToLatLon(c, p.x, p.y);
+        return gridRef(ll.lat, ll.lon, 3).ref;
+      };
+      post({ type: 'planFacts', id: req.id, result: defenceFacts(g, obstacles, lastAttack.attack, req.plan, ref) });
     } else if (req.type === 'develop') {
       if (!grid || !lastScenarioLayout) throw new Error('No problem set yet');
       const g = grid;

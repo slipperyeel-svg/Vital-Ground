@@ -37,14 +37,14 @@ import { addMineImages, ensurePointMeasure, ensureSymbol, type Echelon } from '.
 import * as Plan from './app/plan';
 import { problemOfTheDay, SITES, ukDay } from './app/sites';
 import { areaPosition, attackByFire, blockGraphic, supportByFire } from './app/graphics';
-import { controlLine, minefield, objective as objectiveGraphic } from './app/graphics';
+import { areaOutline, controlLine, enemyAxis, minefield, objective as objectiveGraphic, roundArea } from './app/graphics';
 import { addOsOpenMap, BASE_MAPS, baseMapSources, GLYPHS_URL, LABEL_FONT, OS_KEY, OS_OPEN_PREFIX, registerOsProtocol, SPRITE_URL, type BaseMapId } from './app/basemaps';
 import { gridLines } from './geo/gridlines';
 import { latLonToLocal, localToLatLon } from './terrain/elevation';
 import { BOX_M } from './worker/protocol';
 import type { CompanyView, ScenarioView, DemoTerrain, Detail, LoadedGround, ProblemView, SectionView } from './worker/protocol';
 import type { CompanyOptions, LayoutType, SpreadName } from './tactics/companyDefence';
-import type { InfoLevel, LaneMode, TaskType } from './tactics/platoonScenario';
+import type { InfoLevel, LaneMode, ProblemType, TaskType } from './tactics/platoonScenario';
 import type { Intel, Posture } from './tactics/sectionDefence';
 
 // ---------- state ----------
@@ -667,6 +667,7 @@ let lastPlanFacts: Awaited<ReturnType<typeof engine.planFacts>> | null = null;
 
 function clearScenario() {
   scenario = null;
+  document.body.classList.remove('defence');
   planTool = null;
   plan = Plan.emptyPlan();
   (map.getSource('plan') as GeoJSONSource | undefined)?.setData(EMPTY);
@@ -715,11 +716,18 @@ function zoomToSituation() {
   const s = scenario?.scenario;
   if (!box || !s) return;
   const m = s.markers;
-  const pts: P[] = [
-    ...m.friendly.filter((f) => f.echelon === 'platoon' || f.hq).map((f) => f.point),
-    ...m.sightings.filter((x) => x.phase === 1).map((x) => x.point),
-    m.task.objective,
-  ];
+  const pts: P[] = s.problemType === 'defence'
+    ? [
+        // Your area and the ground about 1 km in front of it.
+        ...(m.area?.outline ?? []),
+        { x: m.task.objective.x * 0.35, y: m.task.objective.y * 0.35 },
+        ...m.friendly.filter((f) => f.echelon === 'platoon' || f.hq).map((f) => f.point),
+      ]
+    : [
+        ...m.friendly.filter((f) => f.echelon === 'platoon' || f.hq).map((f) => f.point),
+        ...m.sightings.filter((x) => x.phase === 1).map((x) => x.point),
+        m.task.objective,
+      ];
   const ll = pts.map((p) => localToLatLon(box!.centre, p.x, p.y));
   const lons = ll.map((q) => q.lon), lats = ll.map((q) => q.lat);
   map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 50, animate: false, maxZoom: 15 });
@@ -746,7 +754,7 @@ function renderSituation() {
   for (const e of elements) {
     const hq = /HQ/.test(e.who);
     const num = e.who.match(/^(\d)/)?.[1] ?? '';
-    const short = { 'in contact': 'contact', 'at mines': 'mines', 'under shellfire': 'shelled', moving: '', 'at the end of its route': '' }[e.state];
+    const short = { 'in contact': 'contact', 'at mines': 'mines', 'under shellfire': 'shelled', moving: '', 'at the end of its route': '', 'in position': '' }[e.state];
     units.push(unitFeature(e.point, { identity: 'friend', echelon: hq ? 'platoon' : 'section', hq, kind: ownKind }, hq ? { designation: '2', higher: 'B' } : { designation: num, higher: '2' }, short));
   }
   // No axis arrows or task graphics: they cluttered the map (PO, 15 Nov 2026). Objectives,
@@ -755,8 +763,19 @@ function renderSituation() {
   if (m.bgObjective.onMap) graphics.push(...objectiveGraphic(c, m.bgObjective.point, 250, m.bgObjective.name));
   // Your objective, by its codename (secure and neutralise; find-and-fix and screen have no objective to draw).
   if (m.task.code) graphics.push(...objectiveGraphic(c, m.task.objective, 150, m.task.code));
+  // Defence (PO, 23 Nov 2026): your platoon area; the enemy's axes (only those reported, dashed, until the ground truth).
+  if (m.area) graphics.push(...areaOutline(c, m.area.outline, m.area.label, 'friend'));
+  for (const a of m.enemyAxes ?? []) if (dsShown || a.reported) graphics.push(...enemyAxis(c, a.path, dsShown ? a.label : 'Expected', !dsShown));
+  if (dsShown && m.enemyAssembly) graphics.push(...roundArea(c, m.enemyAssembly, 250, 'AA', 'hostile'));
 
-  if (dsShown && scenario?.company?.platoons) {
+  if (dsShown && s.problemType === 'defence') {
+    // The attack as it really came: overwatch, and the groups where they formed up.
+    for (const o of m.enemyOverwatch ?? [])
+      units.push(unitFeature(o.point, { identity: 'hostile', echelon: 'section', kind: scenario?.attack?.options.mounted ? 'mechanisedInfantry' : 'infantry' }, {}, o.label));
+    for (const a of m.enemyAxes ?? [])
+      units.push(unitFeature(a.path[Math.min(a.path.length - 1, 2)], { identity: 'hostile', echelon: a.kind === 'infiltration' ? 'team' : 'section', kind: a.kind === 'mounted' ? 'mechanisedInfantry' : 'infantry' }, {}, a.label));
+    for (const x of m.sightings) if (x.phase === 2 && phase2Shown) units.push(unitFeature(x.point, { identity: 'hostile', echelon: x.echelon as Echelon }, {}, x.label));
+  } else if (dsShown && scenario?.company?.platoons) {
     const co = scenario.company;
     for (const pl of co.platoons!) {
       // Each platoon is shown by its dashed outline and label; its sections and teams carry the symbols.
@@ -834,6 +853,22 @@ function showScenario() {
 /** Draw (or remove) the ground truth on the map: the whole enemy, fire, dead ground, mines, the obvious route. */
 function showScenarioDS(show: boolean) {
   const v = scenario;
+  if (box && v?.attack && v.scenario) {
+    // Defence: dead ground from your area (where the enemy could close unseen) and the attack itself.
+    const a = v.attack;
+    $('sc-ds').hidden = !show;
+    (map.getSource('company-zones') as ImageSource).updateImage({
+      url: show ? companyZonesImage(a.maskWidth, a.maskHeight, new Uint8Array(a.maskWidth * a.maskHeight), a.deadFromArea, null) : BLANK,
+      coordinates: boxCorners(box),
+    });
+    (map.getSource('company') as GeoJSONSource).setData(EMPTY);
+    (map.getSource('scenario') as GeoJSONSource).setData(EMPTY);
+    dsShown = show;
+    renderSituation();
+    renderPlan();
+    void showPlanFacts(show);
+    return;
+  }
   if (!box || !v?.company || !v.scenario) return;
   const c = v.company;
   $('sc-ds').hidden = !show;
@@ -997,14 +1032,16 @@ async function runScenarioInner(
     const now = resume?.problem.now ?? opts.now ?? problemTime();
     const label = resume?.problem.label ?? opts.label;
     const laneChoice = resume?.problem.lane ?? (kind === 'daily' ? '' : ($('sel-lane') as HTMLSelectElement).value);
-    scenario = await engine.scenario({ task: task || undefined, info: info || undefined, options: {}, seed, now, layout: (layoutChoice || undefined) as LayoutType | undefined, spread: (spreadChoice || undefined) as SpreadName | undefined, lane: (laneChoice || undefined) as LaneMode | undefined }, status);
+    // Attack or defence (PO, 23 Nov 2026): as chosen, else at random (the Problem of the day leaves it to its seed).
+    const typeChoice = resume?.problem.type ?? (kind === 'daily' ? '' : ($('sel-type') as HTMLSelectElement).value);
+    scenario = await engine.scenario({ task: task || undefined, info: info || undefined, options: {}, seed, now, layout: (layoutChoice || undefined) as LayoutType | undefined, spread: (spreadChoice || undefined) as SpreadName | undefined, lane: (laneChoice || undefined) as LaneMode | undefined, problemType: (typeChoice || undefined) as ProblemType | undefined }, status);
     if (!scenario.found || !scenario.scenario) {
       $('sc-note').textContent = `${scenario.featureNote} ${scenario.log.join(' ')} Try a point a little way off.`;
       status('No problem fits here');
       return;
     }
     $('sc-note').textContent = scenario.featureNote;
-    problemKey = { lat: box.centre.lat, lon: box.centre.lon, seed, task, info, detail: chosenDetail(), now, kind, label, layout: layoutChoice, spread: spreadChoice, lane: laneChoice };
+    problemKey = { lat: box.centre.lat, lon: box.centre.lon, seed, task, info, detail: chosenDetail(), now, kind, label, layout: layoutChoice, spread: spreadChoice, lane: laneChoice, type: typeChoice };
     plan = resume ? resume.plan : Plan.emptyPlan();
     if (kind === 'quick') {
       scenario.scenario.questions = QUICK_QUESTIONS;
@@ -1012,6 +1049,7 @@ async function runScenarioInner(
       scenario.scenario.title = `Quick problem: ${scenario.scenario.title}`;
     } else if (kind === 'daily') scenario.scenario.title = `Problem of the day, ${label}: ${scenario.scenario.title}`;
     document.body.classList.toggle('quick', kind === 'quick');
+    document.body.classList.toggle('defence', scenario.scenario.problemType === 'defence');
     $('quick-block').hidden = kind !== 'quick';
     showScenario();
     if (kind === 'quick') answerBoxes('quick-answers', QUICK_QUESTIONS, plan.answers);
@@ -1039,7 +1077,16 @@ $('btn-sc-develop').addEventListener('click', async () => {
   const s = scenario?.scenario;
   if (!s || !box) return;
   if (plan.developed) return setStage('develop');
-  const missing = Plan.missingRoutes(plan);
+  if (s.problemType === 'defence') {
+    // Defence: the situation develops from where the sections are sited.
+    const missingS = ['1 Sect', '2 Sect', '3 Sect'].filter((k) => !plan.marks.some((m) => m.kind === k));
+    if (missingS.length) {
+      $('plan-mode').textContent = `Site ${missingS.join(', ')} first: the situation develops from where you put your sections.`;
+      status('Site every section before the situation develops');
+      return;
+    }
+  }
+  const missing = s.problemType === 'defence' ? [] : Plan.missingRoutes(plan);
   if (missing.length) {
     $('plan-mode').textContent = `Draw a route for ${missing.map((w) => Plan.WHO_NAME[w]).join(', ')} first: the situation develops from the routes you choose.`;
     status('Mark every route before the situation develops');
@@ -1163,7 +1210,18 @@ function markFeatures(m: Plan.PlanMarkLL): object[] {
   const icon = (name: string, anchor: string, text: string, off: [number, number] = [0, 0]) => [
     { type: 'Feature', properties: { kind: 'icon', icon: name, anchor, text, off }, geometry: { type: 'Point', coordinates: [m.lon, m.lat] } },
   ];
+  const ownKind = s?.bgType === 'mechanised' ? 'mechanisedInfantry' : 'infantry';
   switch (m.kind) {
+    case '1 Sect':
+    case '2 Sect':
+    case '3 Sect': {
+      const { name, offset } = ensureSymbol(map, { identity: 'friend', echelon: 'section', kind: ownKind }, { designation: m.kind[0], higher: '2' });
+      return icon(name, 'top-left', '', offset);
+    }
+    case 'Killing area':
+      return areaPosition(c, p, dir, withNum('EA'), 240, 160);
+    case 'Obstacle':
+      return blockGraphic(c, p, dir, withNum('OBS'));
     case 'OP':
       return icon(ensurePointMeasure(map, 'op'), 'center', withNum('OP'));
     case 'Fire support':
@@ -1177,8 +1235,7 @@ function markFeatures(m: Plan.PlanMarkLL): object[] {
     case 'Cut-off':
       return blockGraphic(c, p, dir, withNum('B'));
     case 'Pl HQ': {
-      const kind = s?.bgType === 'mechanised' ? 'mechanisedInfantry' : 'infantry';
-      const { name, offset } = ensureSymbol(map, { identity: 'friend', echelon: 'platoon', hq: true, kind }, { designation: '2', higher: 'B' });
+      const { name, offset } = ensureSymbol(map, { identity: 'friend', echelon: 'platoon', hq: true, kind: ownKind }, { designation: '2', higher: 'B' });
       return icon(name, 'top-left', '', offset);
     }
     case 'RV':
@@ -1198,7 +1255,9 @@ function renderPlan() {
     for (const p of r) features.push({ type: 'Feature', properties: { kind: 'vertex' }, geometry: pt(p) });
     if (r.length) features.push({ type: 'Feature', properties: { kind: 'routeLabel', text: w }, geometry: pt(r[r.length - 1]) });
   }
-  if (box) for (const m of plan.marks) features.push(...markFeatures(m));
+  // Defence: once the situation develops, the sections and Pl HQ are shown where they now are (renderSituation).
+  const shownElsewhere = (m: Plan.PlanMarkLL) => phase2Shown && scenario?.scenario?.problemType === 'defence' && (/^\d Sect$/.test(m.kind) || m.kind === 'Pl HQ');
+  if (box) for (const m of plan.marks) if (!shownElsewhere(m)) features.push(...markFeatures(m));
   (map.getSource('plan') as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features } as never);
 
   const items: HTMLElement[] = [];
@@ -1430,6 +1489,7 @@ $('btn-resume').addEventListener('click', async () => {
   const sp = Plan.loadSavedPlan();
   if (!sp) return;
   const k = sp.problem;
+  ($('sel-type') as HTMLSelectElement).value = k.type ?? '';
   ($('sel-task') as HTMLSelectElement).value = k.task;
   ($('sel-info') as HTMLSelectElement).value = k.info;
   ($('sel-detail') as HTMLSelectElement).value = k.detail;
@@ -1438,6 +1498,21 @@ $('btn-resume').addEventListener('click', async () => {
   await runScenario(k.seed, sp);
 });
 
+
+// Problem type and task (PO, 23 Nov 2026): the task list shows the tasks of the type chosen;
+// choosing a task of the other type changes the type to match.
+function syncTaskList() {
+  const type = ($('sel-type') as HTMLSelectElement).value;
+  const task = $('sel-task') as HTMLSelectElement;
+  for (const o of Array.from(task.options)) o.hidden = !!type && !!o.dataset.type && o.dataset.type !== type;
+  if (task.selectedOptions[0]?.hidden) task.value = '';
+}
+$('sel-type').addEventListener('change', syncTaskList);
+$('sel-task').addEventListener('change', () => {
+  const t = ($('sel-task') as HTMLSelectElement).selectedOptions[0]?.dataset.type;
+  if (t) ($('sel-type') as HTMLSelectElement).value = t;
+  syncTaskList();
+});
 
 // ---------- enemy company (DS view) ----------
 let company: CompanyView | null = null;

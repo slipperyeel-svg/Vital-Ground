@@ -277,3 +277,42 @@ export function blockGraphic(c: LL, p: Point, dir: Point, text = 'B'): Feature[]
     label(c, add(add(p, dir, -60 * K), n, 30 * K), text, { side: 'friend' }),
   ];
 }
+
+// ---------- Defence (PO, 23 Nov 2026) ----------
+
+/**
+ * An enemy axis along its real path (APP-6 axis of advance, simplified to its
+ * centre line): red, dashed while it is only expected, solid in the ground truth;
+ * an arrowhead at the end and its name halfway.
+ */
+export function enemyAxis(c: LL, path: Point[], text: string, dashed: boolean): Feature[] {
+  if (path.length < 2) return [];
+  const end = path[path.length - 1];
+  // Arrowhead from a point about 60 m back along the path.
+  let back = path[path.length - 2];
+  for (let k = path.length - 2; k >= 0; k--) {
+    back = path[k];
+    if (Math.hypot(end.x - back.x, end.y - back.y) >= 60) break;
+  }
+  const d = unit(back, end);
+  const n = perp(d);
+  const head = [add(add(end, d, -60), n, 35), end, add(add(end, d, -60), n, -35)];
+  return [
+    line(c, path, { kind: 'axis', side: 'hostile', dashed }),
+    line(c, head, { kind: 'axis', side: 'hostile', dashed: false }),
+    label(c, path[Math.floor(path.length / 2)], text, { side: 'hostile' }),
+  ];
+}
+
+/** An area (your platoon area, or the enemy's assembly area): an outline with its name inside. */
+export function areaOutline(c: LL, pts: Point[], text: string, side: 'friend' | 'hostile', dashed = false): Feature[] {
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  return [line(c, [...pts, pts[0]], { kind: 'area', side, dashed }), label(c, { x: cx, y: cy }, text, { side, big: true })];
+}
+
+/** A round area of radius r (assembly area). */
+export function roundArea(c: LL, p: Point, r: number, text: string, side: 'friend' | 'hostile'): Feature[] {
+  const ring: Point[] = [];
+  for (let k = 0; k < 36; k++) ring.push({ x: p.x + r * Math.cos((k * Math.PI) / 18), y: p.y + r * Math.sin((k * Math.PI) / 18) });
+  return areaOutline(c, ring, text, side);
+}

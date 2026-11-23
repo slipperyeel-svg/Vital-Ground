@@ -64,13 +64,22 @@
             <details class="options">
               <summary>Problem options</summary>
               <div class="row selects">
+                <label>Problem type
+                  <select id="sel-type">
+                    <option value="" selected>Random</option>
+                    <option value="attack">Attack</option>
+                    <option value="defence">Defence</option>
+                  </select>
+                </label>
                 <label>Task
                   <select id="sel-task">
                     <option value="" selected>Generator decides</option>
-                    <option value="secure">Secure ground beyond</option>
-                    <option value="neutralise">Neutralise enemy in an area</option>
-                    <option value="findFix">Find and fix</option>
-                    <option value="screen">Screen a flank</option>
+                    <option value="secure" data-type="attack">Secure ground beyond</option>
+                    <option value="neutralise" data-type="attack">Neutralise enemy in an area</option>
+                    <option value="findFix" data-type="attack">Find and fix</option>
+                    <option value="screen" data-type="attack">Screen a flank</option>
+                    <option value="defend" data-type="defence">Defend a platoon position</option>
+                    <option value="block" data-type="defence">Block a route</option>
                   </select>
                 </label>
                 <label>Information
@@ -187,9 +196,10 @@
             <div class="block">
           <div id="plan-block">
             <h3>Your plan</h3>
-            <p class="detail">Draw a route for each section and for Platoon HQ (the situation develops from them), then add your positions. Tap a button, then tap the map; or walk to the spot and use "Mark where I stand". It is kept on this phone.</p>
-            <div class="label">Routes</div>
-            <div class="route-row">
+            <p class="detail attack-only">Draw a route for each section and for Platoon HQ (the situation develops from them), then add your positions. Tap a button, then tap the map; or walk to the spot and use "Mark where I stand". It is kept on this phone.</p>
+            <p class="detail defence-only">Site each section and Platoon HQ (the situation develops from where you put them), then your OP, killing area and obstacle if you have them. Tap a button, then tap the map; or walk to the spot and use "Mark where I stand". It is kept on this phone.</p>
+            <div class="label attack-only">Routes</div>
+            <div class="route-row attack-only">
               <button class="route-btn" data-who="1 Sect">1 Sect</button>
               <button class="route-btn" data-who="2 Sect">2 Sect</button>
               <button class="route-btn" data-who="3 Sect">3 Sect</button>
@@ -197,19 +207,24 @@
             </div>
             <div class="label">Positions</div>
             <div class="pos-palette">
+              <button class="pos-btn defence-only" data-kind="1 Sect"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="20" cy="3" r="1.6" fill="#0a3fa8"/><rect x="9" y="7" width="22" height="14" fill="#bfe6f5"/><path d="M9 7 L31 21 M31 7 L9 21"/></svg><span>1 Sect</span></button>
+              <button class="pos-btn defence-only" data-kind="2 Sect"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="20" cy="3" r="1.6" fill="#0a3fa8"/><rect x="9" y="7" width="22" height="14" fill="#bfe6f5"/><path d="M9 7 L31 21 M31 7 L9 21"/></svg><span>2 Sect</span></button>
+              <button class="pos-btn defence-only" data-kind="3 Sect"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="20" cy="3" r="1.6" fill="#0a3fa8"/><rect x="9" y="7" width="22" height="14" fill="#bfe6f5"/><path d="M9 7 L31 21 M31 7 L9 21"/></svg><span>3 Sect</span></button>
               <button class="pos-btn" data-kind="OP"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4 L32 24 L8 24 Z"/></svg><span>OP</span></button>
-              <button class="pos-btn" data-kind="Fire support"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 18 H32 M8 18 L3 8 M32 18 L37 8 M8 18 L4 24 M32 18 L36 24"/><path d="M1 11 L3 8 L6 10 M34 10 L37 8 L39 11"/></svg><span>Fire support (SBF)</span></button>
-              <button class="pos-btn" data-kind="Attack by fire"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 24 L10 18 H30 L35 24 M20 18 V4 M16 8 L20 4 L24 8"/></svg><span>Attack by fire (ABF)</span></button>
-              <button class="pos-btn" data-kind="FUP"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="32" height="16" rx="8"/><text x="20" y="18" font-size="8" fill="#0a3fa8" stroke="none" text-anchor="middle" font-family="sans-serif" font-weight="700">FUP</text></svg><span>FUP</span></button>
-              <button class="pos-btn" data-kind="Assault position"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="36" height="16" rx="8"/><text x="20" y="18" font-size="7" fill="#0a3fa8" stroke="none" text-anchor="middle" font-family="sans-serif" font-weight="700">ASLT</text></svg><span>Assault position</span></button>
-              <button class="pos-btn" data-kind="Cut-off"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M26 4 V24 M26 14 H6"/><text x="12" y="11" font-size="8" fill="#0a3fa8" stroke="none" font-family="sans-serif" font-weight="700">B</text></svg><span>Cut-off</span></button>
+              <button class="pos-btn attack-only" data-kind="Fire support"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 18 H32 M8 18 L3 8 M32 18 L37 8 M8 18 L4 24 M32 18 L36 24"/><path d="M1 11 L3 8 L6 10 M34 10 L37 8 L39 11"/></svg><span>Fire support (SBF)</span></button>
+              <button class="pos-btn attack-only" data-kind="Attack by fire"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 24 L10 18 H30 L35 24 M20 18 V4 M16 8 L20 4 L24 8"/></svg><span>Attack by fire (ABF)</span></button>
+              <button class="pos-btn attack-only" data-kind="FUP"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="32" height="16" rx="8"/><text x="20" y="18" font-size="8" fill="#0a3fa8" stroke="none" text-anchor="middle" font-family="sans-serif" font-weight="700">FUP</text></svg><span>FUP</span></button>
+              <button class="pos-btn attack-only" data-kind="Assault position"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="36" height="16" rx="8"/><text x="20" y="18" font-size="7" fill="#0a3fa8" stroke="none" text-anchor="middle" font-family="sans-serif" font-weight="700">ASLT</text></svg><span>Assault position</span></button>
+              <button class="pos-btn attack-only" data-kind="Cut-off"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M26 4 V24 M26 14 H6"/><text x="12" y="11" font-size="8" fill="#0a3fa8" stroke="none" font-family="sans-serif" font-weight="700">B</text></svg><span>Cut-off</span></button>
               <button class="pos-btn" data-kind="Pl HQ"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="4" width="22" height="14" fill="#bfe6f5"/><path d="M9 4 L31 18 M31 4 L9 18 M9 18 V26"/></svg><span>Pl HQ</span></button>
-              <button class="pos-btn" data-kind="RV"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 H28 V16 L20 25 L12 16 Z" fill="#fff"/><text x="20" y="13" font-size="8" fill="#0a3fa8" stroke="none" text-anchor="middle" font-family="sans-serif" font-weight="700">RV</text></svg><span>RV</span></button>
+              <button class="pos-btn defence-only" data-kind="Killing area"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 Q20 2 34 8 Q38 16 32 22 Q20 27 8 22 Q2 16 6 8 Z"/><text x="20" y="18" font-size="8" fill="#0a3fa8" stroke="none" text-anchor="middle" font-family="sans-serif" font-weight="700">EA</text></svg><span>Killing area</span></button>
+              <button class="pos-btn defence-only" data-kind="Obstacle"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14 H36"/><path d="M8 8 L14 20 M14 8 L8 20 M18 8 L24 20 M24 8 L18 20 M28 8 L34 20 M34 8 L28 20"/></svg><span>Obstacle (wire)</span></button>
+              <button class="pos-btn attack-only" data-kind="RV"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 H28 V16 L20 25 L12 16 Z" fill="#fff"/><text x="20" y="13" font-size="8" fill="#0a3fa8" stroke="none" text-anchor="middle" font-family="sans-serif" font-weight="700">RV</text></svg><span>RV</span></button>
               <button class="pos-btn" data-kind="Other"><svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true" fill="none" stroke="#0a3fa8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 H28 V16 L20 25 L12 16 Z" fill="#fff"/><text x="20" y="13" font-size="8" fill="#0a3fa8" stroke="none" text-anchor="middle" font-family="sans-serif" font-weight="700">PT</text></svg><span>Other point</span></button>
             </div>
             <!-- The current choices (set by the buttons above). -->
             <select id="sel-route" hidden><option>1 Sect</option><option>2 Sect</option><option>3 Sect</option><option>Pl HQ</option></select>
-            <select id="sel-mark" hidden><option>OP</option><option>Fire support</option><option>Attack by fire</option><option>FUP</option><option>Assault position</option><option>Cut-off</option><option>Pl HQ</option><option>RV</option><option>Other</option></select>
+            <select id="sel-mark" hidden><option>1 Sect</option><option>2 Sect</option><option>3 Sect</option><option>Killing area</option><option>Obstacle</option><option>OP</option><option>Fire support</option><option>Attack by fire</option><option>FUP</option><option>Assault position</option><option>Cut-off</option><option>Pl HQ</option><option>RV</option><option>Other</option></select>
             <button id="btn-plan-route" hidden>Draw route</button>
             <button id="btn-plan-mark" hidden>Mark a position</button>
             <div class="row buttons">
@@ -252,12 +267,12 @@
             <p class="detail">There is no school solution. These are the facts of the ground and the enemy; judge your own decision and orders against them.</p>
             <div class="legend wrap">
               <span><span class="sw" style="background:#c00"></span> enemy position</span>
-              <span><span class="sw" style="background:#fff;border:2px dashed #c00"></span> dummy</span>
-              <span><span class="sw" style="background:#e8a000"></span> outpost</span>
-              <span><span class="sw" style="background:rgba(200,60,0,0.7)"></span> interlocking fire</span>
-              <span><span class="sw" style="background:rgba(40,90,220,0.55)"></span> dead ground</span>
-              <span><span class="sw" style="background:#c62828"></span> obvious route</span>
-              <span><span class="sw" style="background:rgba(204,0,0,.12);border:2px solid #c00"></span> minefield (APP-6)</span>
+              <span class="attack-only"><span class="sw" style="background:#fff;border:2px dashed #c00"></span> dummy</span>
+              <span class="attack-only"><span class="sw" style="background:#e8a000"></span> outpost</span>
+              <span class="attack-only"><span class="sw" style="background:rgba(200,60,0,0.7)"></span> interlocking fire</span>
+              <span class="attack-only"><span class="sw" style="background:rgba(40,90,220,0.55)"></span> dead ground</span><span class="defence-only"><span class="sw" style="background:rgba(40,90,220,0.55)"></span> dead ground from your area</span><span class="defence-only"><span class="sw" style="background:#c00;height:3px"></span> enemy axis</span>
+              <span class="attack-only"><span class="sw" style="background:#c62828"></span> obvious route</span>
+              <span class="attack-only"><span class="sw" style="background:rgba(204,0,0,.12);border:2px solid #c00"></span> minefield (APP-6)</span>
             </div>
             <ul id="sc-ds-list"></ul>
             <div id="sc-plan-facts-block" hidden>
@@ -285,11 +300,11 @@
             <p id="ds-summary" class="detail"></p>
             <div class="legend wrap">
               <span><span class="sw" style="background:#c00"></span> enemy position</span>
-              <span><span class="sw" style="background:#fff;border:2px dashed #c00"></span> dummy</span>
-              <span><span class="sw" style="background:rgba(200,60,0,0.7)"></span> interlocking fire</span>
-              <span><span class="sw" style="background:rgba(40,90,220,0.55)"></span> dead ground</span>
-              <span><span class="sw" style="background:#c62828"></span> obvious route</span>
-              <span><span class="sw" style="background:rgba(204,0,0,.12);border:2px solid #c00"></span> minefield (APP-6)</span>
+              <span class="attack-only"><span class="sw" style="background:#fff;border:2px dashed #c00"></span> dummy</span>
+              <span class="attack-only"><span class="sw" style="background:rgba(200,60,0,0.7)"></span> interlocking fire</span>
+              <span class="attack-only"><span class="sw" style="background:rgba(40,90,220,0.55)"></span> dead ground</span><span class="defence-only"><span class="sw" style="background:rgba(40,90,220,0.55)"></span> dead ground from your area</span><span class="defence-only"><span class="sw" style="background:#c00;height:3px"></span> enemy axis</span>
+              <span class="attack-only"><span class="sw" style="background:#c62828"></span> obvious route</span>
+              <span class="attack-only"><span class="sw" style="background:rgba(204,0,0,.12);border:2px solid #c00"></span> minefield (APP-6)</span>
             </div>
             <h3>The enemy as laid out</h3>
             <ul id="ds-list"></ul>
@@ -374,9 +389,9 @@
         <div id="co-result" hidden>
           <div class="legend wrap">
             <span><span class="sw enemy"></span> section or team</span>
-            <span><span class="sw" style="background:#e8a000"></span> outpost</span>
+            <span class="attack-only"><span class="sw" style="background:#e8a000"></span> outpost</span>
             <span><span class="sw" style="background:#5a2d82"></span> HQ</span>
-            <span><span class="sw" style="background:#fff;border:2px dashed #c00"></span> dummy</span>
+            <span class="attack-only"><span class="sw" style="background:#fff;border:2px dashed #c00"></span> dummy</span>
             <span><span class="sw" style="background:rgba(230,90,0,0.4)"></span> under fire from one position</span>
             <span><span class="sw" style="background:rgba(200,60,0,0.7)"></span> interlocking arcs (2+)</span>
             <span><span class="sw" style="background:rgba(40,90,220,0.55)"></span> dead ground in front</span>

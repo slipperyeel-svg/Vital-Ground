@@ -5,7 +5,8 @@ import type { ElevationMeta, Point } from '../terrain/grid';
 import type { ProblemText } from '../tactics/problem';
 import type { Intel, Posture } from '../tactics/sectionDefence';
 import type { LayoutType, PlatoonRole, SpreadName, CompanyOptions, PositionKind } from '../tactics/companyDefence';
-import type { InfoLevel, LaneMode, PlatoonScenario, TaskType } from '../tactics/platoonScenario';
+import type { InfoLevel, LaneMode, PlatoonScenario, ProblemType, TaskType } from '../tactics/platoonScenario';
+import type { AttackOptions } from '../tactics/enemyAttack';
 import type { SectionScenarioText } from '../tactics/sectionScenario';
 import type { GroundClassification } from '../terrain/classify';
 import type { ContourLine } from '../terrain/contours';
@@ -83,6 +84,8 @@ export type WorkerRequest =
       spread?: SpreadName;
       /** Force how much of the enemy lies inside your boundaries (the DS). */
       lane?: LaneMode;
+      /** Attack or defence (PO, 23 Nov 2026); otherwise from the task, or chosen at random. */
+      problemType?: ProblemType;
       /** The time the problem is set for (ms since 1970), so a resumed problem reads the same. */
       now?: number;
     }
@@ -211,6 +214,8 @@ export interface ScenarioView {
     covered: { path: Point[]; lengthM: number; underFire: number; minesCrossed: number } | null;
   };
   company?: CompanyView;
+  /** Defence: the enemy's attack, for the ground truth (axes and positions are in the scenario's markers). */
+  attack?: { deadFromArea: Uint8Array; maskWidth: number; maskHeight: number; options: AttackOptions };
   timeMs: number;
 }
 
