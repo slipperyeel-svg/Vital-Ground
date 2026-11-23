@@ -94,6 +94,21 @@ describe('objectives and boundaries (PO, 15 Nov 2026)', () => {
     }
     expect(seen.has('I')).toBe(true);
   });
+  it('draws the battlegroup boundary beyond A Coy, with the battlegroup on that flank, when it lies on the map (PO, 23 Nov 2026)', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const s = writePlatoonScenario({ grid: ground, layers: null, layout, seed, now, timeZone: 'Europe/London' });
+      const flanks = s.friendlyForces.find((f) => f.element === 'Flanks')!.detail;
+      const m = flanks.match(/Beyond A Coy is the battlegroup boundary with (1 [A-Z ]+?) BG/)!;
+      expect(m).toBeTruthy();
+      const far = s.markers.control.filter((c) => c.label === 'II' && c.sides!.includes(m[1]));
+      if (far.length) {
+        expect(far[0].sides).toContain('1 SR');
+      } else expect(flanks).toContain('beyond the edge of this map');
+      // Never the same battalion on both flanks.
+      const near = s.markers.control.filter((c) => c.label === 'II').map((c) => c.sides!.find((x) => x !== '1 SR'));
+      expect(new Set(near).size).toBe(near.length);
+    }
+  });
   it('platoon frontages vary within 800–1,500 m (light role) and 1,500–3,000 m (mechanised) (PO, 20 Nov 2026)', () => {
     const got: Record<string, Set<number>> = { light: new Set(), mechanised: new Set() };
     for (let seed = 1; seed <= 40; seed++) {

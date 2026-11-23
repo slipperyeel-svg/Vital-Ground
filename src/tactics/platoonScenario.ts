@@ -460,6 +460,11 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
   const bn = OWN_BATTALION;
   const nb = pick2(INFANTRY);
   const neighbour = { short: `1 ${nb.abbr}`, full: `1st Battalion, ${nb.name}` };
+  // The battlegroup on the far flank, beyond A Coy (PO, 23 Nov 2026: boundaries between all
+  // the units detailed). Own random stream, so the other choices for a seed are unchanged.
+  const others = INFANTRY.filter((x) => x.abbr !== nb.abbr);
+  const nb2 = others[Math.floor(rng(input.seed ^ 0xfa2)() * others.length)];
+  const farNeighbour = { short: `1 ${nb2.abbr}`, full: `1st Battalion, ${nb2.name}` };
   const tankRegt = pick2(CAVALRY.filter((c) => c.tanks));
   const battery = pick2(OWN_ARTILLERY.batteries);
   const bgObjName = `OBJ ${pick2(OBJ_NAMES)}`;
@@ -838,6 +843,12 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
   const bgBoundary = followGround(-onePlSide * halfW);
   const baNominal = (f: number) => ({ x: u.x * f + v.x * (laneC(f) + onePlSide * (halfW + spacing)), y: u.y * f + v.y * (laneC(f) + onePlSide * (halfW + spacing)) });
   const baOnMap = onMap(baNominal(0)) && onMap(baNominal(Math.max(400, frontLine)));
+  // A Coy has two platoons up, so its frontage is two platoon frontages; beyond it is the
+  // battlegroup boundary with the battlegroup on that flank.
+  const farOffset = onePlSide * (halfW + 3 * spacing);
+  const farNominal = (f: number) => ({ x: u.x * f + v.x * (laneC(f) + farOffset), y: u.y * f + v.y * (laneC(f) + farOffset) });
+  const farOnMap = onMap(farNominal(0)) && onMap(farNominal(Math.max(400, frontLine)));
+  const farBoundary = farOnMap ? followGround(farOffset) : null;
   const lineEnds = [0, laneC1].flatMap((c0) => [c0 - onePlSide * halfW, c0 + aCoyLat + onePlSide * spacing]);
   const lineLo = Math.min(...lineEnds) - 300;
   const lineHi = Math.max(...lineEnds) + 300;
@@ -847,6 +858,9 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
     ...(baOnMap ? [{ kind: 'boundary' as const, path: boundary.path, label: 'I', sides: (onePlSide > 0 ? ['B', 'A'] : ['A', 'B']) as [string, string] }] : []),
     { kind: 'boundary', path: plBoundary.path, label: '•••', sides: onePlSide > 0 ? ['2', '1'] : ['1', '2'] },
     { kind: 'boundary', path: bgBoundary.path, label: 'II', sides: onePlSide > 0 ? [neighbour.short, bn.short] : [bn.short, neighbour.short] },
+    ...(farBoundary
+      ? [{ kind: 'boundary' as const, path: farBoundary.path, label: 'II', sides: (onePlSide > 0 ? [bn.short, farNeighbour.short] : [farNeighbour.short, bn.short]) as [string, string] }]
+      : []),
     { kind: 'phaseLine', path: across(150, lineLo, lineHi), label: 'SL' },
   ];
   const coyMission = {
@@ -883,6 +897,7 @@ export function writePlatoonScenario(input: ScenarioInput): PlatoonScenario {
       element: 'Flanks',
       detail:
         `${onePlSideWord[0].toUpperCase() + onePlSideWord.slice(1)}: A Coy, about ${km(Math.abs(aCoyLat))} away beyond 1 Pl; ${baOnMap ? `the B/A boundary is shown on the map${boundary.follows ? `, mostly along the ${boundary.follows}` : ''}` : 'the B/A boundary lies beyond the edge of this map'}. ` +
+        `Beyond A Coy is the battlegroup boundary with ${farNeighbour.short} BG, about ${km(Math.abs(farOffset))} away${farBoundary ? `, shown on the map${farBoundary.follows ? `, mostly along the ${farBoundary.follows}` : ''}` : ', beyond the edge of this map'}; ${farNeighbour.short} BG is advancing level with ${bn.short} BG. ` +
         `${openSideWord[0].toUpperCase() + openSideWord.slice(1)}: the battlegroup boundary, about ${km(halfW)} away${bgBoundary.follows ? `, mostly along the ${bgBoundary.follows}` : ''}. Beyond it is ${neighbour.short} BG, whose nearest troops are about 5 km away and out of contact. ` +
         `Rear: C Coy (battlegroup reserve) at ${ref(cCoy)}.`,
     },
